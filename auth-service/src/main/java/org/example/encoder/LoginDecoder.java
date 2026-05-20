@@ -6,8 +6,8 @@ import org.example.objects.BasicLoginCommand;
 import org.example.objects.LoginCommand;
 import org.example.objects.TokenLoginCommand;
 import org.example.objects.Type;
+import org.example.utils.Base64Utils;
 
-import java.util.Arrays;
 import java.util.List;
 
 public class LoginDecoder extends MessageToMessageDecoder<String> {
@@ -23,44 +23,42 @@ public class LoginDecoder extends MessageToMessageDecoder<String> {
 			return;
 		}
 
-		LoginCommand loginCommand = null;
 		try {
 			Type type = Type.valueOf(parts[1]);
+			LoginCommand loginCommand;
+
 			switch (type) {
 				case BASIC -> {
 					if (parts.length != 4) {
-						ctx.fireChannelRead("Malformed Login Request:" + msg);
-						// close connection if invalid request format
-						ctx.close();
+						sendErrorAndClose(ctx, "Malformed Login Request");
 						return;
 					}
-					loginCommand = new BasicLoginCommand(parts[2], parts[3]);
+					loginCommand = new BasicLoginCommand(Base64Utils.decodeBase64(parts[2]), Base64Utils.decodeBase64(parts[3]));
 				}
 				case TOKEN -> {
 					if (parts.length != 3) {
-						ctx.fireChannelRead("Malformed Login Request:" + msg);
-						// close connection if invalid request format
-						ctx.close();
+						sendErrorAndClose(ctx, "Malformed Login Request");
 						return;
 					}
-					loginCommand = new TokenLoginCommand(parts[2]);
+					loginCommand = new TokenLoginCommand(Base64Utils.decodeBase64(parts[2]));
 				}
 				default -> {
-					ctx.fireChannelRead("Malformed Login Request:" + msg);
-					// close connection if invalid request format
-					ctx.close();
+					sendErrorAndClose(ctx, "Malformed Login Request");
 					return;
 				}
 			}
-		} catch (IllegalArgumentException e) {
-			ctx.writeAndFlush("Invalid type: " + parts[1] + ",Expected type: " + Arrays.toString(Type.values()));
-			return;
-		}
+
 			out.add(loginCommand);
+
+		} catch (IllegalArgumentException e) {
+			sendErrorAndClose(ctx, "Invalid type: " + parts[1]);
+		} catch (Base64Utils.Base64Exception e) {
+			sendErrorAndClose(ctx, e.getMessage());
+		}
 	}
 
-	private void sendError(ChannelHandlerContext ctx, String message) {
-		ctx.writeAndFlush("ERROR: " + message + "\n");
+	private void sendErrorAndClose(ChannelHandlerContext ctx, String msg) {
+		ctx.writeAndFlush("ERROR: " + msg + "\n");
 		ctx.close();
 	}
 }

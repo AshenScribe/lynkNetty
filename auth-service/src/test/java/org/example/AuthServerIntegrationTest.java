@@ -10,12 +10,21 @@ import io.netty.handler.codec.LineBasedFrameDecoder;
 import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.codec.string.StringEncoder;
 import io.netty.util.CharsetUtil;
+import org.example.config.TestDatabaseConfig;
+import org.example.db.DatabaseClient;
+import org.example.db.entity.User;
+import org.example.db.repository.BaseDatabaseTest;
+import org.example.db.repository.UserRepository;
+import org.example.security.JwtProvider;
+import org.example.security.JwtTestUtils;
 import org.example.utils.Base64Utils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mindrot.jbcrypt.BCrypt;
 
 import java.net.ServerSocket;
+import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -23,36 +32,44 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class AuthServerIntegrationTest {
+class AuthServerIntegrationTest extends BaseDatabaseTest {
 
 	private AuthServer authServer;
 	private Thread serverThread;
 	private int testPort;
+	private UserRepository userRepository;
 
 	@BeforeEach
 	void setUp() throws Exception {
-		// Find a free port before each test
 		testPort = findFreePort();
+		JwtTestUtils.ensureInitialized();
+		DatabaseClient databaseClient = new DatabaseClient(new TestDatabaseConfig(postgres, SSL_DIR));
+		databaseClient.clearSchema();
+		databaseClient.initializeSchema();
+		userRepository = new UserRepository(databaseClient.getConnectionFactory());
 
-		authServer = new AuthServer(testPort, new NioServerSocketChannel());
+		String hashedPw = BCrypt.hashpw("testpass", BCrypt.gensalt());
+		User testUser = new User("testuser", hashedPw);
+		userRepository.saveUser(testUser).block();
+
+		authServer = new AuthServer(testPort, new NioServerSocketChannel(), databaseClient);
+
 		serverThread = new Thread(() -> {
 			try {
 				authServer.start();
 			} catch (Exception e) {
-				// Expected when server is stopped
 			}
 		});
 		serverThread.setDaemon(true);
 		serverThread.start();
 
-		// Wait for server to start and bind
 		Thread.sleep(500);
 	}
 
 	@AfterEach
 	void tearDown() throws Exception {
+		JwtTestUtils.cleanup();
 		if (authServer != null) {
-			// Stop the server gracefully
 			authServer.stop();
 		}
 
@@ -61,7 +78,6 @@ class AuthServerIntegrationTest {
 			serverThread.join(1000);
 		}
 
-		// Give time for resources to release
 		Thread.sleep(200);
 	}
 
@@ -105,7 +121,7 @@ class AuthServerIntegrationTest {
 			Bootstrap bootstrap = createBootstrap(group, responseQueue);
 			Channel channel = bootstrap.connect("localhost", testPort).sync().channel();
 
-			String encodedToken = Base64Utils.encodeBase64("test-token-123");
+			String encodedToken = Base64Utils.encodeBase64(JwtProvider.getInstance().createToken("testuser"));
 			channel.writeAndFlush("LOGIN TOKEN " + encodedToken + "\n");
 
 			String response = responseQueue.poll(3, TimeUnit.SECONDS);
@@ -132,8 +148,6 @@ class AuthServerIntegrationTest {
 			String encodedPass = Base64Utils.encodeBase64("newpass123");
 			channel.writeAndFlush("REGISTER " + encodedUser + " " + encodedPass + "\n");
 
-			// Register decoder doesn't send a response on success
-			// Wait a bit to see if any error response comes
 			Thread.sleep(500);
 
 			channel.close().sync();
@@ -152,12 +166,10 @@ class AuthServerIntegrationTest {
 			Bootstrap bootstrap = createBootstrap(group, responseQueue);
 			Channel channel = bootstrap.connect("localhost", testPort).sync().channel();
 
-			// Malformed: missing password
 			String encodedUser = Base64Utils.encodeBase64("testuser");
 			channel.writeAndFlush("LOGIN BASIC " + encodedUser + "\n");
 
 			String response = responseQueue.poll(3, TimeUnit.SECONDS);
-			// Should get an error response
 			if (response != null) {
 				assertTrue(response.contains("ERROR:") || response.contains("Malformed"));
 			}
@@ -216,22 +228,24 @@ class AuthServerIntegrationTest {
 	@Test
 	void testMultipleLoginAttempts() throws Exception {
 		BlockingQueue<String> responseQueue = new LinkedBlockingQueue<>();
-
 		EventLoopGroup group = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
 
 		try {
 			Bootstrap bootstrap = createBootstrap(group, responseQueue);
 			Channel channel = bootstrap.connect("localhost", testPort).sync().channel();
 
-			// Send multiple login requests
 			for (int i = 0; i < 3; i++) {
-				String encodedUser = Base64Utils.encodeBase64("user" + i);
-				String encodedPass = Base64Utils.encodeBase64("pass" + i);
-				channel.writeAndFlush("LOGIN BASIC " + encodedUser + " " + encodedPass + "\n");
+				String plainPassword = "password" + i;
+
+				User user = new User("username" + i, BCrypt.hashpw(plainPassword, BCrypt.gensalt()));
+				userRepository.saveUser(user).block();
+
+				channel.writeAndFlush("LOGIN BASIC " + Base64Utils.encodeBase64(user.username()) + " " + Base64Utils.encodeBase64(plainPassword) + "\n");
 
 				String response = responseQueue.poll(2, TimeUnit.SECONDS);
 				assertNotNull(response, "Should receive response for attempt " + i);
-				assertTrue(response.startsWith("Auth Result:"));
+				assertTrue(response.startsWith("Auth Result:"),
+						"Response should start with 'Auth Result:' for attempt " + i + " but was: " + response);
 			}
 
 			channel.close().sync();
@@ -258,11 +272,10 @@ class AuthServerIntegrationTest {
 				channel.writeAndFlush("LOGIN BASIC " + encodedUser + " " + encodedPass + "\n");
 			}
 
-			// Give some time for processing
 			Thread.sleep(1000);
 
-			// Close all channels
-			for (Channel ch : channels) {
+			for (Iterator<Channel> it = channels.iterator(); it.hasNext(); ) {
+				Channel ch = it.next();
 				if (ch.isOpen()) {
 					ch.close().sync();
 				}

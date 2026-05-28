@@ -10,9 +10,12 @@ import io.netty.handler.codec.string.StringEncoder;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.CharsetUtil;
+import org.example.db.DatabaseClient;
+import org.example.db.repository.UserRepository;
 import org.example.encoder.LoginDecoder;
 import org.example.encoder.RegisterDecoder;
 import org.example.handler.LoginServerHandler;
+import org.example.handler.RegisterServerHandler;
 
 public class AuthServer {
 
@@ -20,14 +23,18 @@ public class AuthServer {
 	ServerBootstrap bootstrap;
 	EventLoopGroup bossGroup;
 	EventLoopGroup workerGroup;
+	DatabaseClient databaseClient;
 
-	public AuthServer(int port, ServerChannel channel) {
+	public AuthServer(int port, ServerChannel channel, DatabaseClient databaseClient) {
+		this.databaseClient = databaseClient;
 		initServer(port, channel, LogLevel.DEBUG, 128);
 	}
 
-	public AuthServer(int port, ServerChannel channel, LogLevel level, int acceptedQueueSize) {
+	public AuthServer(int port, ServerChannel channel, LogLevel level, int acceptedQueueSize, DatabaseClient databaseClient) {
+		this.databaseClient = databaseClient;
 		initServer(port, channel, level, acceptedQueueSize);
 	}
+
 
 	private void initServer(int port, ServerChannel channel, LogLevel level, int acceptedQueueSize) {
 		this.port = port;
@@ -47,7 +54,8 @@ public class AuthServer {
 										new StringEncoder(CharsetUtil.UTF_8),
 										new LoginDecoder(),
 										new RegisterDecoder(),
-										new LoginServerHandler());
+										new LoginServerHandler(new UserRepository(databaseClient.getConnectionFactory())),
+										new RegisterServerHandler(new UserRepository(databaseClient.getConnectionFactory())));
 					}
 				})
 				.option(ChannelOption.SO_BACKLOG, acceptedQueueSize)

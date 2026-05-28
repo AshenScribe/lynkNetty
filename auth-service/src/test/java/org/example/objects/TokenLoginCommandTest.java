@@ -1,65 +1,74 @@
 package org.example.objects;
 
+import org.example.db.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import reactor.test.StepVerifier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class TokenLoginCommandTest {
 
-    @Test
-    void testTokenLoginCommandCreation() {
-        TokenLoginCommand cmd = new TokenLoginCommand("token-abc-123");
+	private UserRepository userRepository;
 
-        assertEquals("token-abc-123", cmd.token());
-    }
+	@BeforeEach
+	void setUp() {
+		userRepository = Mockito.mock(UserRepository.class);
+	}
 
-    @Test
-    void testExecuteAuthentication() {
-        TokenLoginCommand cmd = new TokenLoginCommand("token123");
-        String result = cmd.executeAuthentication();
+	@Test
+	void testTokenLoginCommandCreation() {
+		TokenLoginCommand cmd = new TokenLoginCommand("token-abc-123");
 
-        assertNotNull(result);
-        assertEquals("", result);
-    }
+		assertEquals("token-abc-123", cmd.token());
+	}
 
-    @Test
-    void testTokenLoginCommandWithEmptyToken() {
-        TokenLoginCommand cmd = new TokenLoginCommand("");
+	@Test
+	void testExecuteAuthentication() {
+		TokenLoginCommand cmd = new TokenLoginCommand("token123");
+		StepVerifier.create(cmd.executeAuthentication(userRepository))
+				.expectNext("Success");
+	}
 
-        assertEquals("", cmd.token());
-        assertNotNull(cmd.executeAuthentication());
-    }
+	@Test
+	void testTokenLoginCommandWithEmptyToken() {
+		TokenLoginCommand cmd = new TokenLoginCommand("");
 
-    @Test
-    void testTokenLoginCommandWithNull() {
-        TokenLoginCommand cmd = new TokenLoginCommand(null);
+		assertEquals("", cmd.token());
+		assertNotNull(cmd.executeAuthentication(userRepository));
+	}
 
-        assertNull(cmd.token());
-    }
+	@Test
+	void testTokenLoginCommandWithNull() {
+		TokenLoginCommand cmd = new TokenLoginCommand(null);
 
-    @Test
-    void testTokenLoginCommandEquality() {
-        TokenLoginCommand cmd1 = new TokenLoginCommand("token123");
-        TokenLoginCommand cmd2 = new TokenLoginCommand("token123");
-        TokenLoginCommand cmd3 = new TokenLoginCommand("token456");
+		assertNull(cmd.token());
+	}
 
-        assertEquals(cmd1, cmd2);
-        assertNotEquals(cmd1, cmd3);
-    }
+	@Test
+	void testTokenLoginCommandEquality() {
+		TokenLoginCommand cmd1 = new TokenLoginCommand("token123");
+		TokenLoginCommand cmd2 = new TokenLoginCommand("token123");
+		TokenLoginCommand cmd3 = new TokenLoginCommand("token456");
 
-    @Test
-    void testTokenLoginCommandHashCode() {
-        TokenLoginCommand cmd1 = new TokenLoginCommand("token123");
-        TokenLoginCommand cmd2 = new TokenLoginCommand("token123");
+		assertEquals(cmd1, cmd2);
+		assertNotEquals(cmd1, cmd3);
+	}
 
-        assertEquals(cmd1.hashCode(), cmd2.hashCode());
-    }
+	@Test
+	void testTokenLoginCommandHashCode() {
+		TokenLoginCommand cmd1 = new TokenLoginCommand("token123");
+		TokenLoginCommand cmd2 = new TokenLoginCommand("token123");
 
-    @Test
-    void testTokenLoginCommandToString() {
-        TokenLoginCommand cmd = new TokenLoginCommand("token123");
-        String str = cmd.toString();
+		assertEquals(cmd1.hashCode(), cmd2.hashCode());
+	}
 
-        assertTrue(str.contains("token123"));
-    }
+	@Test
+	void testTokenLoginCommandToString() {
+		TokenLoginCommand cmd = new TokenLoginCommand("token123");
+		String str = cmd.toString();
+
+		assertTrue(str.contains("token123"));
+	}
 }

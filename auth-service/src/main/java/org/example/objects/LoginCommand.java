@@ -1,5 +1,8 @@
 package org.example.objects;
 
+import org.example.db.repository.UserRepository;
+import reactor.core.publisher.Mono;
+
 public sealed interface LoginCommand permits BasicLoginCommand, TokenLoginCommand {
-	String executeAuthentication();
+	Mono<String> executeAuthentication(UserRepository userRepository);
 }

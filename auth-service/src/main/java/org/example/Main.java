@@ -4,11 +4,18 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import org.aeonbits.owner.ConfigFactory;
 import org.example.config.DatabaseConfig;
 import org.example.db.DatabaseClient;
+import org.example.security.JwtProvider;
+import org.example.security.keyProvider.FileKeyProvider;
 
 public class Main {
 	public static void main(String[] args) {
 		DatabaseConfig config = ConfigFactory.create(DatabaseConfig.class);
 		DatabaseClient databaseClient = new DatabaseClient(config);
+		try {
+			JwtProvider.initialize(new FileKeyProvider("public.pem", "private.pem"));
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
 
 		try {
 			databaseClient.initializeSchema();

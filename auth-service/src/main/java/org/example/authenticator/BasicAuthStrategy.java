@@ -15,7 +15,7 @@ public class BasicAuthStrategy implements AuthStrategy {
 		return userRepository.findUserByUsername(authRequest.getUsername())
 				.flatMap(user -> {
 					if (BCrypt.checkpw(authRequest.getPassword(), user.password())) {
-						return Mono.just(JwtProvider.createToken(authRequest.getUsername()));
+						return Mono.just(JwtProvider.getInstance().createToken(authRequest.getUsername()));
 					} else {
 						return Mono.error(new RuntimeException("Invalid Password"));
 					}

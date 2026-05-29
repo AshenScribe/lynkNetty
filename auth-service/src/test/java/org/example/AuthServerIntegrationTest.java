@@ -16,13 +16,16 @@ import org.example.db.entity.User;
 import org.example.db.repository.BaseDatabaseTest;
 import org.example.db.repository.UserRepository;
 import org.example.security.JwtProvider;
+import org.example.security.JwtTestUtils;
 import org.example.utils.Base64Utils;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.net.ServerSocket;
+import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -40,6 +43,7 @@ class AuthServerIntegrationTest extends BaseDatabaseTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		testPort = findFreePort();
+		JwtTestUtils.ensureInitialized();
 		DatabaseClient databaseClient = new DatabaseClient(new TestDatabaseConfig(postgres, SSL_DIR));
 		databaseClient.clearSchema();
 		databaseClient.initializeSchema();
@@ -65,6 +69,7 @@ class AuthServerIntegrationTest extends BaseDatabaseTest {
 
 	@AfterEach
 	void tearDown() throws Exception {
+		JwtTestUtils.cleanup();
 		if (authServer != null) {
 			authServer.stop();
 		}
@@ -75,6 +80,11 @@ class AuthServerIntegrationTest extends BaseDatabaseTest {
 		}
 
 		Thread.sleep(200);
+	}
+
+	@AfterAll
+	static void tearDownAll() {
+		stop();
 	}
 
 	private int findFreePort() throws Exception {
@@ -117,7 +127,7 @@ class AuthServerIntegrationTest extends BaseDatabaseTest {
 			Bootstrap bootstrap = createBootstrap(group, responseQueue);
 			Channel channel = bootstrap.connect("localhost", testPort).sync().channel();
 
-			String encodedToken = Base64Utils.encodeBase64(JwtProvider.createToken("testuser"));
+			String encodedToken = Base64Utils.encodeBase64(JwtProvider.getInstance().createToken("testuser"));
 			channel.writeAndFlush("LOGIN TOKEN " + encodedToken + "\n");
 
 			String response = responseQueue.poll(3, TimeUnit.SECONDS);
@@ -270,7 +280,8 @@ class AuthServerIntegrationTest extends BaseDatabaseTest {
 
 			Thread.sleep(1000);
 
-			for (Channel ch : channels) {
+			for (Iterator<Channel> it = channels.iterator(); it.hasNext(); ) {
+				Channel ch = it.next();
 				if (ch.isOpen()) {
 					ch.close().sync();
 				}

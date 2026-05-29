@@ -37,6 +37,9 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql:2.0.5")
     testImplementation("org.testcontainers:testcontainers-r2dbc:2.0.5")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:2.0.5")
+
+    implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
+    implementation("com.auth0:java-jwt:4.4.0")
 }
 
 tasks.test {

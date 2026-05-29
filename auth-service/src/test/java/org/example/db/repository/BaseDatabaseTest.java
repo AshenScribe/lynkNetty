@@ -46,8 +46,7 @@ public abstract class BaseDatabaseTest {
 		}
 	}
 
-	protected void stop() {
-		postgres.stop();
+	protected static void stop() {
 		for (File f : new File(SSL_DIR).listFiles()) {
 			if (f.isFile() && !f.getName().endsWith(".sh")) f.delete();
 		}
